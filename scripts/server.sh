@@ -5,10 +5,10 @@ set -u
 DOCKER_DIR="/srv/docker"
 
 DOWNLOAD_PROJECT="docker"
-DOWNLOAD_COMPOSE="$DOCKER_DIR/compose.yaml"
+DOWNLOAD_COMPOSE="$DOCKER_DIR/download.yaml"
 
 ARR_PROJECT="arrstack"
-ARR_COMPOSE="$DOCKER_DIR/Stack.yaml"
+ARR_COMPOSE="$DOCKER_DIR/arr.yaml"
 
 usage() {
     cat <<EOF_USAGE
