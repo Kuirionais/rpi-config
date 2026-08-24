@@ -1,0 +1,64 @@
+services:
+  radarr_en:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr_en
+    ports:
+      - 7878:7878
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./radarr_en/config:/config
+      - /srv/media-stack:/data
+    restart: unless-stopped
+    labels:
+    - "com.centurylinklabs.watchtower.enable=true"
+    
+  radarr_fr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr_fr
+    ports:
+      - 7879:7878
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./radarr_fr/config:/config
+      - /srv/media-stack:/data
+    restart: unless-stopped
+    labels:
+    - "com.centurylinklabs.watchtower.enable=true"
+  
+  sonarr_en:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr_en
+    ports:
+      - 8989:8989
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./sonarr_en/config:/config
+      - /srv/media-stack:/data
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  sonarr_fr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr_fr
+    ports:
+      - 8990:8989
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./sonarr_fr/config:/config
+      - /srv/media-stack:/data
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"

@@ -1,0 +1,68 @@
+# Large/local data
+game installers/
+media-stack/
+
+# Secrets / credentials
+docker/.env
+docker/**/.env
+docker/**/secrets/
+docker/gluetun/piaportforward.json
+
+# Private keys / certificates
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Logs and runtime data
+**/logs/
+**/log/
+**/cache/
+**/tmp/
+*.log
+# *arr application runtime/config databases
+**/config/MediaCover/
+**/config/Backups/
+**/config/Sentry/
+**/config/asp/
+**/config/*.db
+**/config/*.db-*
+**/config/*.pid
+
+# Transmission runtime state
+**/transmission/config/resume/
+**/transmission/config/torrents/
+**/transmission/config/*.dat
+**/transmission/config/*.json
+
+# Misc runtime files
+**/config/testfile
+
+# Application configuration/state
+**/config/config.xml
+
+# Jackett runtime/config
+docker/jackett/config/
+
+# JDownloader runtime/config
+docker/jdownloader/config/
+
+# Prowlarr runtime config
+docker/prowlarr/prowlarr/config/
+
+# Gluetun provider/server data is runtime data
+docker/gluetun/gluetun/
+docker/gluetun/servers/
+
+# Sonarr/Radarr runtime state
+docker/sonarr/config/
+docker/sonarr_en/config/
+docker/sonarr_fr/config/
+docker/radarr_en/config/
+docker/radarr_fr/config/
+
+# Jellyfin runtime/config/data
+docker/jellyfin/config/
+
+# Prowlarr runtime/config/definitions
+docker/prowlarr/config/
