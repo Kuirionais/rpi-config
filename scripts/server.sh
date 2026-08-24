@@ -15,14 +15,15 @@ usage() {
 Usage: $0 <command> [stack] [--json]
 
 Commands:
-  start [stack]       Start a stack
-  stop [stack]        Stop a stack
-  restart [stack]     Restart a stack
+  start [stack]       Start a stack or JDownloader
+  stop [stack]        Stop a stack or JDownloader
+  restart [stack]     Restart a stack or JDownloader
   status [stack]      Show stack/container status
 
 Stacks:
   download            VPN/download stack
   arr                 Sonarr/Radarr stack
+  jdownloader         JDownloader container only
   all                 All active stacks
 
 Options:
@@ -31,7 +32,9 @@ Options:
 Examples:
   $0 start
   $0 start download
+  $0 start jdownloader
   $0 stop arr
+  $0 stop jdownloader
   $0 restart all
   $0 status
   $0 status arr
@@ -91,6 +94,30 @@ stop_stack() {
 
 restart_stack() {
     stop_stack "$1" && start_stack "$1"
+}
+
+jdownloader_action() {
+    case "$1" in
+        start)
+            echo "==> Starting JDownloader..."
+            compose_cmd "$DOWNLOAD_PROJECT" "$DOWNLOAD_COMPOSE" start jdownloader
+            ;;
+
+        stop)
+            echo "==> Stopping JDownloader..."
+            compose_cmd "$DOWNLOAD_PROJECT" "$DOWNLOAD_COMPOSE" stop jdownloader
+            ;;
+
+        restart)
+            echo "==> Restarting JDownloader..."
+            compose_cmd "$DOWNLOAD_PROJECT" "$DOWNLOAD_COMPOSE" restart jdownloader
+            ;;
+
+        *)
+            echo "Unknown JDownloader action: $1" >&2
+            return 1
+            ;;
+    esac
 }
 
 # Return JSON for one compose project.
@@ -266,7 +293,7 @@ for arg in "$@"; do
             JSON=true
             ;;
 
-        download|arr|all)
+        download|arr|jdownloader|all)
             STACK="$arg"
             ;;
 
@@ -300,6 +327,10 @@ case "$COMMAND" in
                         restart_stack "$STACK"
                         ;;
                 esac
+                ;;
+
+            jdownloader)
+                jdownloader_action "$COMMAND"
                 ;;
 
             all)
