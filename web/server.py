@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 
 import json
+from pathlib import Path
 import base64
+from pathlib import Path
 import os
+from pathlib import Path
 import subprocess
+from pathlib import Path
 import urllib.parse
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOST = "0.0.0.0"
@@ -78,6 +83,77 @@ main {
     max-width: 1100px;
     margin: auto;
     padding: 24px;
+}
+
+.process-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+}
+
+.process-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.process-table th {
+    text-align: left;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.process-table td {
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.process-table td:last-child,
+.process-table th:last-child {
+    text-align: right;
+}
+
+@media (max-width: 800px) {
+    .process-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.system-card {
+    margin-bottom: 24px;
+}
+
+.system-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 10px;
+}
+
+.system-stat {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+}
+
+.system-stat-label {
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 6px;
+}
+
+.system-stat-value {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.system-stat-detail {
+    color: var(--muted);
+    font-size: 11px;
+    margin-top: 4px;
 }
 
 .global-actions {
@@ -268,7 +344,75 @@ footer {
         </button>
     </div>
 
+    <section class="card system-card">
+
+        <div class="card-header">
+            <div class="card-title">System</div>
+        </div>
+
+        <div class="card-body">
+            <div id="system" class="system-grid">
+                <div class="system-stat">
+                    <div class="system-stat-label">Loading</div>
+                    <div class="system-stat-value">—</div>
+                </div>
+            </div>
+        </div>
+
+    </section>
+
     <div id="stacks"></div>
+
+    <section class="card">
+
+        <div class="card-header">
+            <div class="card-title">Processes</div>
+        </div>
+
+        <div class="card-body">
+
+            <div class="process-grid">
+
+                <div>
+                    <h3>Linux Processes</h3>
+                    <table class="process-table">
+                        <thead>
+                            <tr>
+                                <th>Process</th>
+                                <th>PID</th>
+                                <th>RAM</th>
+                            </tr>
+                        </thead>
+                        <tbody id="processes">
+                            <tr>
+                                <td colspan="3">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div>
+                    <h3>Docker Containers</h3>
+                    <table class="process-table">
+                        <thead>
+                            <tr>
+                                <th>Container</th>
+                                <th>RAM</th>
+                            </tr>
+                        </thead>
+                        <tbody id="docker-memory">
+                            <tr>
+                                <td colspan="3">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
 
     <h3>Activity</h3>
     <div id="log" class="log">Ready.</div>
@@ -339,6 +483,163 @@ async function action(command, stack) {
 
     document.querySelectorAll("button").forEach(b => b.disabled = false);
 }
+
+function formatUptime(seconds) {
+    if (seconds == null) return "—";
+
+    const days = Math.floor(seconds / 86400);
+    seconds %= 86400;
+
+    const hours = Math.floor(seconds / 3600);
+    seconds %= 3600;
+
+    const minutes = Math.floor(seconds / 60);
+
+    if (days > 0) {
+        return `${days}d ${hours}h`;
+    }
+
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    }
+
+    return `${minutes}m`;
+}
+
+
+function renderSystem(system) {
+
+    if (!system) {
+        return `
+            <div class="system-stat">
+                <div class="system-stat-label">System</div>
+                <div class="system-stat-value">Unavailable</div>
+            </div>
+        `;
+    }
+
+    const memory = system.memory;
+    const disk = system.disk;
+    const load = system.load;
+
+    return `
+        <div class="system-stat">
+            <div class="system-stat-label">CPU</div>
+            <div class="system-stat-value">
+                ${system.cpu_percent == null ? "—" : esc(system.cpu_percent) + "%"}
+            </div>
+            <div class="system-stat-detail">
+                Load ${load ? esc(load.map(v => v.toFixed(2)).join(" / ")) : "—"}
+            </div>
+        </div>
+
+        <div class="system-stat">
+            <div class="system-stat-label">Temperature</div>
+            <div class="system-stat-value">
+                ${system.temperature_c == null ? "—" : esc(system.temperature_c) + "°C"}
+            </div>
+            <div class="system-stat-detail">
+                CPU temperature
+            </div>
+        </div>
+
+        <div class="system-stat">
+            <div class="system-stat-label">Memory</div>
+            <div class="system-stat-value">
+                ${memory ? esc(memory.percent) + "%" : "—"}
+            </div>
+            <div class="system-stat-detail">
+                ${memory
+                    ? esc(memory.used_mb) + " / " + esc(memory.total_mb) + " MB"
+                    : "Unavailable"}
+            </div>
+
+            ${memory ? `
+                <div class="system-stat-detail">
+                    Available: ${esc(memory.available_mb)} MB
+                </div>
+
+                <div class="system-stat-detail">
+                    Cache: ${esc(memory.cached_mb)} MB
+                </div>
+
+                <div class="system-stat-detail">
+                    Swap: ${esc(memory.swap.used_mb)} /
+                    ${esc(memory.swap.total_mb)} MB
+                    (${esc(memory.swap.percent)}%)
+                </div>
+            ` : ""}
+        </div>
+
+        <div class="system-stat">
+            <div class="system-stat-label">Disk</div>
+            <div class="system-stat-value">
+                ${disk ? esc(disk.percent) + "%" : "—"}
+            </div>
+            <div class="system-stat-detail">
+                ${disk
+                    ? esc(disk.used_gb) + " / " + esc(disk.total_gb) + " GB"
+                    : "Unavailable"}
+            </div>
+        </div>
+
+        <div class="system-stat">
+            <div class="system-stat-label">Uptime</div>
+            <div class="system-stat-value">
+                ${formatUptime(system.uptime_seconds)}
+            </div>
+            <div class="system-stat-detail">
+                Since last boot
+            </div>
+        </div>
+    `;
+}
+
+
+function renderProcesses(processes) {
+
+    const el = document.getElementById("processes");
+
+    if (!processes || processes.length === 0) {
+        el.innerHTML = `
+            <tr>
+                <td colspan="3">No process information available.</td>
+            </tr>
+        `;
+        return;
+    }
+
+    el.innerHTML = processes.map(process => `
+        <tr>
+            <td>${esc(process.name)}</td>
+            <td>${esc(process.pid)}</td>
+            <td>${esc(process.memory_mb)} MB</td>
+        </tr>
+    `).join("");
+}
+
+
+function renderDockerMemory(containers) {
+
+    const el = document.getElementById("docker-memory");
+
+    if (!containers || containers.length === 0) {
+        el.innerHTML = `
+            <tr>
+                <td colspan="2">No running containers.</td>
+            </tr>
+        `;
+        return;
+    }
+
+    el.innerHTML = containers.map(container => `
+        <tr>
+            <td>${esc(container.name)}</td>
+            <td>${esc(container.memory)}</td>
+        </tr>
+    `).join("");
+}
+
 
 function renderStack(name, stack) {
 
@@ -450,6 +751,12 @@ async function loadStatus() {
             throw new Error(data.error || "Status request failed");
         }
 
+        document.getElementById("system").innerHTML =
+            renderSystem(data.system);
+
+        renderProcesses(data.processes);
+        renderDockerMemory(data.docker_memory);
+
         document.getElementById("stacks").innerHTML =
             renderStack(stackNames.download, data.download) +
             renderStack(stackNames.arr, data.arr);
@@ -500,6 +807,289 @@ def run_control(command, stack):
     return result.stdout.strip()
 
 
+def _read_int(path):
+    try:
+        return int(Path(path).read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def get_system_stats():
+    stats = {}
+
+    # CPU temperature: kernel thermal zone, no subprocess required.
+    temp_raw = _read_int("/sys/class/thermal/thermal_zone0/temp")
+    stats["temperature_c"] = (
+        round(temp_raw / 1000.0, 1)
+        if temp_raw is not None
+        else None
+    )
+
+    # CPU usage from /proc/stat.
+    try:
+        with open("/proc/stat", "r") as f:
+            line = f.readline()
+
+        values = list(map(int, line.split()[1:]))
+        idle = values[3] + (values[4] if len(values) > 4 else 0)
+        total = sum(values)
+
+        previous = getattr(get_system_stats, "_cpu_sample", None)
+        get_system_stats._cpu_sample = (total, idle)
+
+        if previous:
+            prev_total, prev_idle = previous
+            total_delta = total - prev_total
+            idle_delta = idle - prev_idle
+
+            if total_delta > 0:
+                stats["cpu_percent"] = round(
+                    100.0 * (total_delta - idle_delta) / total_delta,
+                    1,
+                )
+            else:
+                stats["cpu_percent"] = 0.0
+        else:
+            stats["cpu_percent"] = None
+
+    except (OSError, ValueError, IndexError):
+        stats["cpu_percent"] = None
+
+    # Memory from /proc/meminfo.
+    try:
+        mem = {}
+
+        with open("/proc/meminfo", "r") as f:
+            for line in f:
+                key, value = line.split(":", 1)
+                mem[key] = int(value.strip().split()[0])
+
+        total_kb = mem["MemTotal"]
+        available_kb = mem["MemAvailable"]
+        used_kb = total_kb - available_kb
+
+        cached_kb = (
+            mem.get("Cached", 0)
+            + mem.get("SReclaimable", 0)
+            - mem.get("Shmem", 0)
+        )
+
+        stats["memory"] = {
+            "used_mb": round(used_kb / 1024, 1),
+            "total_mb": round(total_kb / 1024, 1),
+            "available_mb": round(available_kb / 1024, 1),
+            "cached_mb": round(max(cached_kb, 0) / 1024, 1),
+            "percent": round(100.0 * used_kb / total_kb, 1),
+        }
+
+        # Swap usage
+        swap_total_kb = mem.get("SwapTotal", 0)
+        swap_free_kb = mem.get("SwapFree", 0)
+        swap_used_kb = swap_total_kb - swap_free_kb
+
+        stats["memory"]["swap"] = {
+            "used_mb": round(swap_used_kb / 1024, 1),
+            "total_mb": round(swap_total_kb / 1024, 1),
+            "percent": (
+                round(100.0 * swap_used_kb / swap_total_kb, 1)
+                if swap_total_kb
+                else 0.0
+            ),
+        }
+
+    except (OSError, ValueError, KeyError, ZeroDivisionError):
+        stats["memory"] = None
+
+    # Load average.
+    try:
+        with open("/proc/loadavg", "r") as f:
+            load = f.read().split()
+
+        stats["load"] = [
+            float(load[0]),
+            float(load[1]),
+            float(load[2]),
+        ]
+
+    except (OSError, ValueError, IndexError):
+        stats["load"] = None
+
+    # Uptime.
+    try:
+        with open("/proc/uptime", "r") as f:
+            uptime = float(f.read().split()[0])
+
+        stats["uptime_seconds"] = int(uptime)
+
+    except (OSError, ValueError, IndexError):
+        stats["uptime_seconds"] = None
+
+    # Root filesystem usage.
+    try:
+        usage = os.statvfs("/")
+
+        total = usage.f_blocks * usage.f_frsize
+        free = usage.f_bavail * usage.f_frsize
+        used = total - free
+
+        stats["disk"] = {
+            "used_gb": round(used / 1024**3, 1),
+            "total_gb": round(total / 1024**3, 1),
+            "percent": round(100.0 * used / total, 1) if total else 0.0,
+        }
+
+    except OSError:
+        stats["disk"] = None
+
+    return stats
+
+
+def get_process_stats(limit=15):
+    """Return the top Linux processes by RSS memory."""
+
+    processes = []
+
+    try:
+        page_size = os.sysconf("SC_PAGE_SIZE")
+
+        for pid_name in os.listdir("/proc"):
+            if not pid_name.isdigit():
+                continue
+
+            pid = int(pid_name)
+
+            try:
+                with open(f"/proc/{pid}/stat", "r") as f:
+                    stat = f.read()
+
+                # Process name is enclosed in parentheses and can contain spaces.
+                close = stat.rfind(")")
+                if close == -1:
+                    continue
+
+                name = stat[stat.find("(") + 1:close]
+                fields = stat[close + 2:].split()
+
+                # RSS is field 24 in /proc/<pid>/stat.
+                rss_pages = int(fields[21])
+                rss_mb = rss_pages * page_size / 1024 / 1024
+
+                processes.append({
+                    "pid": pid,
+                    "name": name,
+                    "memory_mb": round(rss_mb, 1),
+                })
+
+            except (OSError, ValueError, IndexError):
+                continue
+
+    except OSError:
+        return []
+
+    processes.sort(key=lambda x: x["memory_mb"], reverse=True)
+
+    return processes[:limit]
+
+
+def get_docker_memory():
+    """Calculate Docker container RSS from its Linux processes."""
+
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "-q"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=10,
+        )
+
+        if result.returncode != 0:
+            return []
+
+        containers = []
+
+        for container_id in result.stdout.splitlines():
+            container_id = container_id.strip()
+
+            if not container_id:
+                continue
+
+            try:
+                name_result = subprocess.run(
+                    ["docker", "inspect", "--format", "{{.Name}}", container_id],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    timeout=5,
+                )
+
+                name = name_result.stdout.strip().lstrip("/")
+
+                pid_result = subprocess.run(
+                    ["docker", "top", container_id, "-eo", "pid"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    timeout=5,
+                )
+
+                pids = []
+
+                for line in pid_result.stdout.splitlines():
+                    line = line.strip()
+
+                    if line.isdigit():
+                        pids.append(int(line))
+
+                memory_kb = 0
+
+                for pid in pids:
+                    try:
+                        with open(f"/proc/{pid}/stat", "r") as f:
+                            stat = f.read()
+
+                        close = stat.rfind(")")
+
+                        if close == -1:
+                            continue
+
+                        fields = stat[close + 2:].split()
+
+                        # RSS is field 24 in /proc/<pid>/stat.
+                        rss_pages = int(fields[21])
+
+                        page_size = os.sysconf("SC_PAGE_SIZE")
+
+                        memory_kb += (
+                            rss_pages * page_size / 1024
+                        )
+
+                    except (OSError, ValueError, IndexError):
+                        continue
+
+                memory_mb = memory_kb / 1024
+
+                containers.append({
+                    "name": name,
+                    "memory": f"{memory_mb:.1f} MB",
+                    "memory_percent": None,
+                })
+
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+
+        containers.sort(
+            key=lambda x: float(x["memory"].split()[0]),
+            reverse=True,
+        )
+
+        return containers
+
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+
+
+
 def get_status():
     result = subprocess.run(
         [CONTROL, "status", "--json"],
@@ -514,7 +1104,11 @@ def get_status():
             result.stderr.strip() or result.stdout.strip() or "Status failed"
         )
 
-    return json.loads(result.stdout)
+    data = json.loads(result.stdout)
+    data["system"] = get_system_stats()
+    data["processes"] = get_process_stats()
+    data["docker_memory"] = get_docker_memory()
+    return data
 
 
 
