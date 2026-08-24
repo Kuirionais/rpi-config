@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
 import json
+import base64
 import os
 import subprocess
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-HOST = "127.0.0.1"
+HOST = "0.0.0.0"
 PORT = 8080
 CONTROL = "/srv/scripts/server.sh"
 
@@ -516,6 +517,46 @@ def get_status():
     return json.loads(result.stdout)
 
 
+
+def authorized(handler):
+    username = os.environ.get("RPI_UI_USER", "")
+    password = os.environ.get("RPI_UI_PASSWORD", "")
+
+    if not username or not password:
+        return False
+
+    header = handler.headers.get("Authorization", "")
+
+    if not header.startswith("Basic "):
+        return False
+
+    try:
+        decoded = base64.b64decode(
+            header[6:],
+            validate=True
+        ).decode("utf-8")
+        supplied_user, supplied_password = decoded.split(":", 1)
+    except Exception:
+        return False
+
+    return (
+        supplied_user == username
+        and supplied_password == password
+    )
+
+
+def require_auth(handler):
+    if authorized(handler):
+        return True
+
+    handler.send_response(401)
+    handler.send_header("WWW-Authenticate", 'Basic realm="RPI Server"')
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Length", "0")
+    handler.end_headers()
+    return False
+
+
 class Handler(BaseHTTPRequestHandler):
 
     def send_json(self, data, status=200):
@@ -530,6 +571,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_GET(self):
+
+        if not require_auth(self):
+            return
 
         parsed = urllib.parse.urlparse(self.path)
 
@@ -554,6 +598,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json({"error": "Not found"}, 404)
 
     def do_POST(self):
+
+        if not require_auth(self):
+            return
 
         parsed = urllib.parse.urlparse(self.path)
 
