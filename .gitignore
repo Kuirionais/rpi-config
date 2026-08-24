@@ -66,3 +66,8 @@ docker/jellyfin/config/
 
 # Prowlarr runtime/config/definitions
 docker/prowlarr/config/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
