@@ -108,112 +108,97 @@ json_stack() {
             project="$DOWNLOAD_PROJECT"
             compose_file="$DOWNLOAD_COMPOSE"
             ;;
-
         arr)
             project="$ARR_PROJECT"
             compose_file="$ARR_COMPOSE"
             ;;
-
         *)
-            echo '{"error":"unknown stack"}'
+            printf '{"error":"unknown stack"}'
             return 1
             ;;
     esac
 
+    # Get all containers belonging to this Compose project directly
+    # from Docker. This works for both running and stopped containers.
     local ids
-    ids="$(compose_cmd "$project" "$compose_file" ps -aq 2>/dev/null || true)"
+    ids="$(docker ps -aq --filter "label=com.docker.compose.project=$project")"
 
     if [ -z "$ids" ]; then
         printf '{"status":"stopped","healthy":false,"containers":{}}'
         return 0
     fi
 
-    local first=1
-    local running=0
-    local total=0
-    local containers=""
+    local inspect_json
 
-    while IFS= read -r id; do
-        [ -z "$id" ] && continue
-
-        total=$((total + 1))
-
-        local name
-        local state
-        local health
-        local image
-        local started
-
-        name="$(docker inspect --format '{{.Name}}' "$id" 2>/dev/null | sed 's#^/##')"
-        state="$(docker inspect --format '{{.State.Status}}' "$id" 2>/dev/null)"
-        health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id" 2>/dev/null)"
-        image="$(docker inspect --format '{{.Config.Image}}' "$id" 2>/dev/null)"
-        started="$(docker inspect --format '{{.State.StartedAt}}' "$id" 2>/dev/null)"
-
-        [ "$state" = "running" ] && running=$((running + 1))
-
-        # JSON escaping using Python if available.
-        # Python is present on normal Raspberry Pi OS installations,
-        # but fall back to basic escaping if it isn't.
-        json_escape() {
-            if command -v python3 >/dev/null 2>&1; then
-                python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().rstrip("\n")))' <<< "$1"
-            else
-                printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-            fi
-        }
-
-        local jname jstate jhealth jimage jstarted
-
-        jname="$(json_escape "$name")"
-        jstate="$(json_escape "$state")"
-        jhealth="$(json_escape "$health")"
-        jimage="$(json_escape "$image")"
-        jstarted="$(json_escape "$started")"
-
-        if [ "$first" -eq 0 ]; then
-            containers+=","
-        fi
-        first=0
-
-        containers+="
-        $jname:{
-            \"status\":$jstate,
-            \"health\":$jhealth,
-            \"image\":$jimage,
-            \"started_at\":$jstarted
-        }"
-    done <<< "$ids"
-
-    local stack_status="stopped"
-    local healthy="false"
-
-    if [ "$running" -eq "$total" ] && [ "$total" -gt 0 ]; then
-        stack_status="running"
-        healthy="true"
-
-        # If a container has an explicit Docker health check and it
-        # isn't healthy, the stack isn't considered healthy.
-        while IFS= read -r id; do
-            [ -z "$id" ] && continue
-
-            local h
-            h="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id" 2>/dev/null)"
-
-            if [ "$h" = "unhealthy" ] || [ "$h" = "starting" ]; then
-                healthy="false"
-            fi
-        done <<< "$ids"
-
-    elif [ "$running" -gt 0 ]; then
-        stack_status="partial"
+    if ! inspect_json="$(docker inspect $ids 2>/dev/null)"; then
+        printf '{"error":"docker inspect failed"}'
+        return 1
     fi
 
-    printf '{'
-    printf '"status":"%s",' "$stack_status"
-    printf '"healthy":%s,' "$healthy"
-    printf '"containers":{%s}' "$containers"
-    printf '}'
+    python3 - "$stack" "$inspect_json" <<'PYJSON'
+import json
+import sys
+
+stack = sys.argv[1]
+containers_raw = sys.argv[2]
+
+try:
+    containers = json.loads(containers_raw)
+except json.JSONDecodeError:
+    print('{"error":"invalid docker inspect output"}')
+    sys.exit(1)
+
+result = {
+    "status": "stopped",
+    "healthy": False,
+    "containers": {}
+}
+
+if not containers:
+    print(json.dumps(result, separators=(",", ":")))
+    sys.exit(0)
+
+running = 0
+has_unhealthy = False
+has_starting = False
+
+for c in containers:
+    name = c.get("Name", "").lstrip("/")
+    state = c.get("State", {})
+    status = state.get("Status", "unknown")
+
+    health_obj = state.get("Health")
+    if health_obj:
+        health = health_obj.get("Status", "unknown")
+    else:
+        health = "none"
+
+    if status == "running":
+        running += 1
+
+    if health == "unhealthy":
+        has_unhealthy = True
+    elif health == "starting":
+        has_starting = True
+
+    result["containers"][name] = {
+        "status": status,
+        "health": health,
+        "image": c.get("Config", {}).get("Image", ""),
+        "started_at": state.get("StartedAt", "")
+    }
+
+total = len(containers)
+
+if running == total and total > 0:
+    result["status"] = "running"
+    result["healthy"] = not (has_unhealthy or has_starting)
+elif running > 0:
+    result["status"] = "partial"
+    result["healthy"] = False
+
+print(json.dumps(result, separators=(",", ":")))
+PYJSON
 }
 
 status_stack() {
