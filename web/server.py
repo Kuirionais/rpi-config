@@ -598,25 +598,6 @@ function renderProcesses(processes) {
 
 
 
-    const el = document.getElementById("docker-memory");
-
-    if (!containers || containers.length === 0) {
-        el.innerHTML = `
-            <tr>
-                <td colspan="2">No running containers.</td>
-            </tr>
-        `;
-        return;
-    }
-
-    el.innerHTML = containers.map(container => `
-        <tr>
-            <td>${esc(container.name)}</td>
-            <td>${esc(container.memory)}</td>
-        </tr>
-    `).join("");
-}
-
 
 function renderStack(name, stack) {
 
@@ -984,7 +965,6 @@ def get_status():
     data = json.loads(result.stdout)
     data["system"] = get_system_stats()
     data["processes"] = get_process_stats()
-    data["docker_memory"] = get_docker_memory()
     return data
 
 
