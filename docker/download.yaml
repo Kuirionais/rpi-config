@@ -1,0 +1,98 @@
+services:
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - VPN_SERVICE_PROVIDER=private internet access
+      - VPN_TYPE=openvpn
+      - OPENVPN_USER=${PIA_USER}
+      - OPENVPN_PASSWORD=${PIA_PASSWORD}
+      - VPN_PORT_FORWARDING=on
+      - VPN_PORT_FORWARDING_UP_COMMAND=/bin/sh /update-transmission-port.sh
+      - SERVER_REGIONS=France
+      - TZ=${TZ}
+      - LAN_NETWORK=192.168.1.0/24
+      - FIREWALL_OUTBOUND_SUBNETS=192.168.1.0/24
+      - RPCUSER=${RPCUSER}
+      - RPCPWD=${RPCPWD}
+    ports:
+      - 9696:9696   # Prowlarr
+      - 8191:8191   # FlareSolverr
+      - 9091:9091   # Transmission
+      - 5800:5800   # JDownloader Web UI
+    volumes:
+      - ./gluetun:/gluetun
+      - ./gluetun/update-transmission-port.sh:/update-transmission-port.sh
+    restart: unless-stopped
+
+  transmission:
+    image: lscr.io/linuxserver/transmission:latest
+    container_name: transmission
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - USER=${RPCUSER}
+      - PASS=${RPCPWD}
+    volumes:
+      - ./transmission/config:/config
+      - /srv/media-stack:/data
+      - /srv/media-stack/media/watch:/watch
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./prowlarr/config:/config
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+      
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    network_mode: "service:gluetun"
+    environment:
+      - TZ=${TZ}
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"    
+      
+  jdownloader:
+    image: jlesage/jdownloader-2:latest
+    container_name: jdownloader
+    network_mode: "service:gluetun"
+    depends_on:
+      - gluetun
+    environment:
+      - USER_ID=${PUID}
+      - GROUP_ID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./jdownloader/config:/config
+      - /srv/media-stack/downloads:/output
+    restart: unless-stopped
+    
+  transmission-tracker-add:
+    image: andrewmhub/transmission-tracker-add:latest
+    container_name: transmission-tracker-add
+    network_mode: "service:gluetun"
+    depends_on:
+      - gluetun
+      - transmission
+    environment:
+      - HOSTPORT=localhost:9091
+      - TR_AUTH=${RPCUSER}:${RPCPWD}
+      - TORRENTLIST=https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt
+    restart: unless-stopped

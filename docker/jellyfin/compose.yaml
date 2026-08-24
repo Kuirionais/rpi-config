@@ -1,0 +1,11 @@
+version: "3.8"
+
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    network_mode: "host"  # uses Pi IP directly
+    volumes:
+      - /srv/media-stack/media:/media
+      - /srv/docker/jellyfin/config:/config
+    restart: unless-stopped
