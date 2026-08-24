@@ -8,6 +8,8 @@ DOWNLOAD_COMPOSE="$DOCKER_DIR/download.yaml"
 ARR_PROJECT="arrstack"
 ARR_COMPOSE="$DOCKER_DIR/arr.yaml"
 
+DOWNLOAD_SERVICES=(gluetun transmission prowlarr flaresolverr transmission-tracker-add)
+
 usage() {
     cat <<EOF_USAGE
 Usage: $0 <command> [stack] [--json]
@@ -19,7 +21,7 @@ Commands:
   status [stack]      Show stack/container status
 
 Stacks:
-  download            VPN/download stack
+  download            VPN/download stack (JDownloader is independent)
   arr                 Sonarr/Radarr stack
   jdownloader         JDownloader container only
   all                 All active stacks
@@ -59,11 +61,11 @@ stack_action() {
     case "$command" in
         start)
             echo "==> Starting $label..."
-            compose_cmd "$project" "$compose_file" up -d
+            compose_cmd "$project" "$compose_file" up -d "${DOWNLOAD_SERVICES[@]}"
             ;;
         stop)
             echo "==> Stopping $label..."
-            compose_cmd "$project" "$compose_file" down
+            compose_cmd "$project" "$compose_file" stop "${DOWNLOAD_SERVICES[@]}"
             ;;
         *) echo "Unknown command: $command" >&2; return 1 ;;
     esac
