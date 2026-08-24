@@ -10,6 +10,10 @@ DOWNLOAD_COMPOSE="$DOCKER_DIR/compose.yaml"
 ARR_PROJECT="arrstack"
 ARR_COMPOSE="$DOCKER_DIR/Stack.yaml"
 
+GLUETUN_CONTAINER="gluetun"
+GLUETUN_TIMEOUT=120
+GLUETUN_INTERVAL=2
+
 usage() {
     cat <<EOF
 Usage: $0 <command> [stack]
@@ -51,12 +55,14 @@ start_stack() {
             echo "==> Starting download stack..."
             compose_cmd "$DOWNLOAD_PROJECT" "$DOWNLOAD_COMPOSE" up -d
             ;;
+
         arr)
             echo "==> Starting ARR stack..."
             compose_cmd "$ARR_PROJECT" "$ARR_COMPOSE" up -d
             ;;
+
         *)
-            echo "Unknown stack: $1"
+            echo "ERROR: Unknown stack: $1"
             return 1
             ;;
     esac
@@ -66,14 +72,16 @@ stop_stack() {
     case "$1" in
         download)
             echo "==> Stopping download stack..."
-            compose_cmd "$DOWNLOAD_PROJECT" "$DOWNLOAD_COMPOSE" down
+            compose_cmd "$DOWNLOAD_PROJECT" "$DOWNLOAD_COMPOSE" stop
             ;;
+
         arr)
             echo "==> Stopping ARR stack..."
-            compose_cmd "$ARR_PROJECT" "$ARR_COMPOSE" down
+            compose_cmd "$ARR_PROJECT" "$ARR_COMPOSE" stop
             ;;
+
         *)
-            echo "Unknown stack: $1"
+            echo "ERROR: Unknown stack: $1"
             return 1
             ;;
     esac
@@ -85,15 +93,147 @@ status_stack() {
             echo "===== DOWNLOAD STACK ====="
             compose_cmd "$DOWNLOAD_PROJECT" "$DOWNLOAD_COMPOSE" ps
             ;;
+
         arr)
             echo "===== ARR STACK ====="
             compose_cmd "$ARR_PROJECT" "$ARR_COMPOSE" ps
             ;;
+
         *)
-            echo "Unknown stack: $1"
+            echo "ERROR: Unknown stack: $1"
             return 1
             ;;
     esac
+}
+
+wait_for_gluetun() {
+    local elapsed=0
+    local health
+
+    echo
+    echo "==> Waiting for Gluetun to become healthy..."
+
+    while (( elapsed < GLUETUN_TIMEOUT )); do
+        health="$(
+            docker inspect \
+                -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' \
+                "$GLUETUN_CONTAINER" 2>/dev/null || true
+        )"
+
+        case "$health" in
+            healthy)
+				echo
+                echo "==> Gluetun is healthy."
+                return 0
+                ;;
+
+            unhealthy)
+                echo
+                echo "ERROR: Gluetun is unhealthy."
+                return 1
+                ;;
+
+            starting)
+                printf "\r    Gluetun: starting (%ss/%ss)" \
+                    "$elapsed" "$GLUETUN_TIMEOUT"
+                ;;
+
+            no-healthcheck)
+                echo
+                echo "ERROR: Gluetun does not have a healthcheck."
+                return 1
+                ;;
+
+            "")
+                printf "\r    Gluetun: not running (%ss/%ss)" \
+                    "$elapsed" "$GLUETUN_TIMEOUT"
+                ;;
+
+            *)
+                printf "\r    Gluetun: %-12s (%ss/%ss)" \
+                    "$health" "$elapsed" "$GLUETUN_TIMEOUT"
+                ;;
+        esac
+
+        sleep "$GLUETUN_INTERVAL"
+        ((elapsed += GLUETUN_INTERVAL))
+    done
+
+    echo
+    echo "ERROR: Timed out waiting for Gluetun to become healthy."
+    return 1
+}
+
+start_all() {
+    echo "===== STARTING ALL STACKS ====="
+
+    if ! start_stack download; then
+        echo "ERROR: Failed to start download stack."
+        return 1
+    fi
+
+    if ! wait_for_gluetun; then
+        echo "ERROR: ARR stack will NOT be started."
+        return 1
+    fi
+
+    if ! start_stack arr; then
+        echo "ERROR: Failed to start ARR stack."
+        return 1
+    fi
+
+    echo
+    echo "==> All stacks started successfully."
+}
+
+stop_all() {
+    echo "===== STOPPING ALL STACKS ====="
+
+    # ARR depends on the download/VPN stack, so stop it first.
+    if ! stop_stack arr; then
+        echo "ERROR: Failed to stop ARR stack."
+        return 1
+    fi
+
+    if ! stop_stack download; then
+        echo "ERROR: Failed to stop download stack."
+        return 1
+    fi
+
+    echo
+    echo "==> All stacks stopped successfully."
+}
+
+restart_all() {
+    echo "===== RESTARTING ALL STACKS ====="
+
+    if ! stop_stack arr; then
+        echo "ERROR: Failed to stop ARR stack."
+        return 1
+    fi
+
+    if ! stop_stack download; then
+        echo "ERROR: Failed to stop download stack."
+        return 1
+    fi
+
+    if ! start_stack download; then
+        echo "ERROR: Failed to start download stack."
+        return 1
+    fi
+
+    if ! wait_for_gluetun; then
+        echo "ERROR: ARR stack will NOT be restarted."
+        return 1
+    fi
+
+    if ! start_stack arr; then
+        echo "ERROR: Failed to start ARR stack."
+        return 1
+    fi
+
+    echo
+    echo "==> All stacks restarted successfully."
 }
 
 case "${1:-}" in
@@ -101,6 +241,7 @@ case "${1:-}" in
         COMMAND="$1"
         STACK="${2:-all}"
         ;;
+
     *)
         usage
         exit 1
@@ -113,12 +254,16 @@ case "$STACK" in
             start)
                 start_stack "$STACK"
                 ;;
+
             stop)
                 stop_stack "$STACK"
                 ;;
+
             restart)
-                stop_stack "$STACK" && start_stack "$STACK"
+                stop_stack "$STACK" &&
+                start_stack "$STACK"
                 ;;
+
             status)
                 status_stack "$STACK"
                 ;;
@@ -128,18 +273,17 @@ case "$STACK" in
     all)
         case "$COMMAND" in
             start)
-                start_stack download && start_stack arr
+                start_all
                 ;;
+
             stop)
-                # Stop ARR first, then download services.
-                stop_stack arr && stop_stack download
+                stop_all
                 ;;
+
             restart)
-                stop_stack arr &&
-                stop_stack download &&
-                start_stack download &&
-                start_stack arr
+                restart_all
                 ;;
+
             status)
                 status_stack download
                 echo
@@ -149,7 +293,7 @@ case "$STACK" in
         ;;
 
     *)
-        echo "Unknown stack: $STACK"
+        echo "ERROR: Unknown stack: $STACK"
         usage
         exit 1
         ;;
