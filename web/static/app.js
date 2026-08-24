@@ -18,6 +18,12 @@ function log(message) {
     element.textContent = `[${time}] ${message}\n` + element.textContent;
 }
 
+function setButtonsDisabled(disabled) {
+    document.querySelectorAll("button").forEach(button => {
+        button.disabled = disabled;
+    });
+}
+
 function confirmAction(command, stack) {
     const label = stack === "all"
         ? "all stacks"
@@ -31,10 +37,7 @@ function confirmAction(command, stack) {
 }
 
 async function action(command, stack) {
-    document.querySelectorAll("button").forEach(button => {
-        button.disabled = true;
-    });
-
+    setButtonsDisabled(true);
     log(`${command} ${stack}...`);
 
     try {
@@ -54,9 +57,7 @@ async function action(command, stack) {
         log(`ERROR: ${error.message}`);
     }
 
-    document.querySelectorAll("button").forEach(button => {
-        button.disabled = false;
-    });
+    setButtonsDisabled(false);
 }
 
 function uptime(seconds) {
@@ -103,7 +104,6 @@ function renderSystem(system) {
                 Load ${load ? esc(load.map(value => value.toFixed(2)).join(" / ")) : "—"}
             </div>
         </div>
-
         <div class="system-stat">
             <div class="system-stat-label">Temperature</div>
             <div class="system-stat-value">
@@ -111,7 +111,6 @@ function renderSystem(system) {
             </div>
             <div class="system-stat-detail">CPU temperature</div>
         </div>
-
         <div class="system-stat">
             <div class="system-stat-label">Memory</div>
             <div class="system-stat-value">
@@ -122,7 +121,6 @@ function renderSystem(system) {
                     ? esc(memory.used_mb) + " / " + esc(memory.total_mb) + " MB"
                     : "Unavailable"}
             </div>
-
             ${memory ? `
                 <div class="system-stat-detail">
                     Available: ${esc(memory.available_mb)} MB
@@ -137,7 +135,6 @@ function renderSystem(system) {
                 </div>
             ` : ""}
         </div>
-
         <div class="system-stat">
             <div class="system-stat-label">Disk</div>
             <div class="system-stat-value">
@@ -149,7 +146,6 @@ function renderSystem(system) {
                     : "Unavailable"}
             </div>
         </div>
-
         <div class="system-stat">
             <div class="system-stat-label">Uptime</div>
             <div class="system-stat-value">
@@ -196,33 +192,36 @@ function statusInfo(stack) {
     return ["stopped", "Stopped"];
 }
 
+function renderContainer(name, container) {
+    return `
+        <div class="container">
+            <div class="container-name">${esc(name)}</div>
+            <div class="container-info">
+                Status: ${esc(container.status)}<br>
+                Health: ${esc(container.health || "none")}<br>
+                Image: ${esc(container.image || "")}
+            </div>
+        </div>
+    `;
+}
+
+function renderContainerList(containers) {
+    let html = "";
+
+    for (const [name, container] of Object.entries(containers || {})) {
+        html += renderContainer(name, container);
+    }
+
+    return html || `
+        <div class="container">
+            <div class="container-info">No containers running.</div>
+        </div>
+    `;
+}
+
 function renderStack(name, stack) {
     const [statusClass, statusText] = statusInfo(stack);
     const key = name === "Download Stack" ? "download" : "arr";
-    let containers = "";
-
-    for (const [containerName, container] of Object.entries(
-        (stack && stack.containers) || {}
-    )) {
-        containers += `
-            <div class="container">
-                <div class="container-name">${esc(containerName)}</div>
-                <div class="container-info">
-                    Status: ${esc(container.status)}<br>
-                    Health: ${esc(container.health || "none")}<br>
-                    Image: ${esc(container.image || "")}
-                </div>
-            </div>
-        `;
-    }
-
-    if (!containers) {
-        containers = `
-            <div class="container">
-                <div class="container-info">No containers running.</div>
-            </div>
-        `;
-    }
 
     return `
         <section class="card">
@@ -233,7 +232,6 @@ function renderStack(name, stack) {
                     ${statusText}
                 </div>
             </div>
-
             <div class="card-body">
                 <div class="actions">
                     <button class="start" onclick="action('start', '${key}')">
@@ -246,8 +244,9 @@ function renderStack(name, stack) {
                         ↻ Restart
                     </button>
                 </div>
-
-                <div class="containers">${containers}</div>
+                <div class="containers">
+                    ${renderContainerList(stack && stack.containers)}
+                </div>
             </div>
         </section>
     `;
@@ -268,7 +267,6 @@ function renderJDownloader(stack) {
                     ${statusText}
                 </div>
             </div>
-
             <div class="card-body">
                 <div class="actions">
                     <button class="start" onclick="action('start', 'jdownloader')">
@@ -281,18 +279,15 @@ function renderJDownloader(stack) {
                         ↻ Restart
                     </button>
                 </div>
-
                 <div class="containers">
-                    <div class="container">
-                        <div class="container-name">jdownloader</div>
-                        <div class="container-info">
-                            Status: ${container ? esc(container.status) : "not created"}<br>
-                            Health: ${container ? esc(container.health || "none") : "none"}<br>
-                            Image: ${container
-                                ? esc(container.image || "")
-                                : "jlesage/jdownloader-2:latest"}
-                        </div>
-                    </div>
+                    ${renderContainer(
+                        "jdownloader",
+                        container || {
+                            status: "not created",
+                            health: "none",
+                            image: "jlesage/jdownloader-2:latest",
+                        }
+                    )}
                 </div>
             </div>
         </section>
@@ -312,14 +307,11 @@ async function loadStatus() {
 
         document.getElementById("system").innerHTML =
             renderSystem(data.system);
-
         renderProcesses(data.processes);
-
         document.getElementById("stacks").innerHTML =
             renderStack(stackNames.download, data.download) +
             renderJDownloader(data.download) +
             renderStack(stackNames.arr, data.arr);
-
         document.getElementById("updated").textContent =
             "Updated " + new Date().toLocaleTimeString();
     } catch (error) {
