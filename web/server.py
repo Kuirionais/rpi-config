@@ -392,29 +392,7 @@ footer {
                 </div>
 
                 <div>
-                    <h3>Docker Containers</h3>
-                    <table class="process-table">
-                        <thead>
-                            <tr>
-                                <th>Container</th>
-                                <th>RAM</th>
-                            </tr>
-                        </thead>
-                        <tbody id="docker-memory">
-                            <tr>
-                                <td colspan="3">Loading...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-            </div>
-
-        </div>
-
-    </section>
-
-    <h3>Activity</h3>
+                    <h3>Activity</h3>
     <div id="log" class="log">Ready.</div>
 
 </main>
@@ -619,7 +597,6 @@ function renderProcesses(processes) {
 }
 
 
-function renderDockerMemory(containers) {
 
     const el = document.getElementById("docker-memory");
 
@@ -755,7 +732,6 @@ async function loadStatus() {
             renderSystem(data.system);
 
         renderProcesses(data.processes);
-        renderDockerMemory(data.docker_memory);
 
         document.getElementById("stacks").innerHTML =
             renderStack(stackNames.download, data.download) +
@@ -989,105 +965,6 @@ def get_process_stats(limit=15):
     processes.sort(key=lambda x: x["memory_mb"], reverse=True)
 
     return processes[:limit]
-
-
-def get_docker_memory():
-    """Calculate Docker container RSS from its Linux processes."""
-
-    try:
-        result = subprocess.run(
-            ["docker", "ps", "-q"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=10,
-        )
-
-        if result.returncode != 0:
-            return []
-
-        containers = []
-
-        for container_id in result.stdout.splitlines():
-            container_id = container_id.strip()
-
-            if not container_id:
-                continue
-
-            try:
-                name_result = subprocess.run(
-                    ["docker", "inspect", "--format", "{{.Name}}", container_id],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=5,
-                )
-
-                name = name_result.stdout.strip().lstrip("/")
-
-                pid_result = subprocess.run(
-                    ["docker", "top", container_id, "-eo", "pid"],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=5,
-                )
-
-                pids = []
-
-                for line in pid_result.stdout.splitlines():
-                    line = line.strip()
-
-                    if line.isdigit():
-                        pids.append(int(line))
-
-                memory_kb = 0
-
-                for pid in pids:
-                    try:
-                        with open(f"/proc/{pid}/stat", "r") as f:
-                            stat = f.read()
-
-                        close = stat.rfind(")")
-
-                        if close == -1:
-                            continue
-
-                        fields = stat[close + 2:].split()
-
-                        # RSS is field 24 in /proc/<pid>/stat.
-                        rss_pages = int(fields[21])
-
-                        page_size = os.sysconf("SC_PAGE_SIZE")
-
-                        memory_kb += (
-                            rss_pages * page_size / 1024
-                        )
-
-                    except (OSError, ValueError, IndexError):
-                        continue
-
-                memory_mb = memory_kb / 1024
-
-                containers.append({
-                    "name": name,
-                    "memory": f"{memory_mb:.1f} MB",
-                    "memory_percent": None,
-                })
-
-            except (OSError, subprocess.TimeoutExpired):
-                continue
-
-        containers.sort(
-            key=lambda x: float(x["memory"].split()[0]),
-            reverse=True,
-        )
-
-        return containers
-
-    except (OSError, subprocess.TimeoutExpired):
-        return []
-
 
 
 def get_status():
