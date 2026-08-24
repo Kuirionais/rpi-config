@@ -310,7 +310,7 @@ async function loadStatus() {
         renderProcesses(data.processes);
         document.getElementById("stacks").innerHTML =
             renderStack(stackNames.download, data.download) +
-            renderJDownloader(data.download) +
+            renderJDownloader(data.jdownloader) +
             renderStack(stackNames.arr, data.arr);
         document.getElementById("updated").textContent =
             "Updated " + new Date().toLocaleTimeString();

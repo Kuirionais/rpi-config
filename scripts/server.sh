@@ -126,6 +126,12 @@ running = 0
 has_unhealthy = has_starting = False
 for c in containers:
     name = c.get("Name", "").lstrip("/")
+
+    # JDownloader lives in the same Compose project but is an independent
+    # service. It has its own UI card and must not affect stack status.
+    if stack == "download" and name == "jdownloader":
+        continue
+
     state = c.get("State", {})
     status = state.get("Status", "unknown")
     health_obj = state.get("Health")
@@ -140,12 +146,57 @@ for c in containers:
         "started_at": state.get("StartedAt", "")
     }
 
-total = len(containers)
+total = len(result["containers"])
 if running == total and total > 0:
     result["status"] = "running"
     result["healthy"] = not (has_unhealthy or has_starting)
 elif running > 0:
     result["status"] = "partial"
+
+print(json.dumps(result, separators=(",", ":")))
+PYJSON
+}
+
+json_jdownloader() {
+    local inspect_json
+
+    if ! inspect_json="$(docker inspect jdownloader 2>/dev/null)"; then
+        printf '{"status":"stopped","healthy":false,"containers":{}}'
+        return 0
+    fi
+
+    python3 - "$inspect_json" <<'PYJSON'
+import json
+import sys
+
+try:
+    containers = json.loads(sys.argv[1])
+except json.JSONDecodeError:
+    print('{"error":"invalid docker inspect output"}')
+    sys.exit(1)
+
+result = {"status": "stopped", "healthy": False, "containers": {}}
+if not containers:
+    print(json.dumps(result, separators=(",", ":")))
+    sys.exit(0)
+
+container = containers[0]
+name = container.get("Name", "jdownloader").lstrip("/")
+state = container.get("State", {})
+status = state.get("Status", "unknown")
+health_obj = state.get("Health")
+health = health_obj.get("Status", "unknown") if health_obj else "none"
+
+result["containers"][name] = {
+    "status": status,
+    "health": health,
+    "image": container.get("Config", {}).get("Image", ""),
+    "started_at": state.get("StartedAt", ""),
+}
+
+if status == "running":
+    result["status"] = "running"
+    result["healthy"] = health not in {"unhealthy", "starting"}
 
 print(json.dumps(result, separators=(",", ":")))
 PYJSON
@@ -166,9 +217,15 @@ status_json() {
             json_stack "$1"
             printf '}\n'
             ;;
+        jdownloader)
+            printf '{"jdownloader":'
+            json_jdownloader
+            printf '}\n'
+            ;;
         all)
             printf '{"download":'; json_stack download
             printf ',"arr":'; json_stack arr
+            printf ',"jdownloader":'; json_jdownloader
             printf '}\n'
             ;;
         *) echo '{"error":"unknown stack"}'; return 1 ;;
