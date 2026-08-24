@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RPI Server</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+    <div>
+        <h1>RPI Server</h1>
+        <div class="subtitle">Docker stack control</div>
+    </div>
+    <div id="updated">Loading...</div>
+</header>
+<main>
+    <div class="global-actions">
+        <button class="start" onclick="action('start', 'all')">▶ Start All</button>
+        <button class="stop" onclick="confirmAction('stop', 'all')">■ Stop All</button>
+        <button class="restart" onclick="confirmAction('restart', 'all')">↻ Restart All</button>
+    </div>
+
+    <section class="card system-card">
+        <div class="card-header">
+            <div class="card-title">System</div>
+        </div>
+        <div class="card-body">
+            <div id="system" class="system-grid">
+                <div class="system-stat">
+                    <div class="system-stat-label">Loading</div>
+                    <div class="system-stat-value">—</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div id="stacks"></div>
+
+    <section class="card">
+        <div class="card-header">
+            <div class="card-title">Processes</div>
+        </div>
+        <div class="card-body">
+            <div class="process-grid">
+                <div>
+                    <h3>Linux Processes</h3>
+                    <table class="process-table">
+                        <thead>
+                            <tr>
+                                <th>Process</th>
+                                <th>PID</th>
+                                <th>RAM</th>
+                            </tr>
+                        </thead>
+                        <tbody id="processes">
+                            <tr>
+                                <td colspan="3">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div>
+                    <h3>Activity</h3>
+                    <div id="log" class="log">Ready.</div>
+                </div>
+            </div>
+        </div>
+    </section>
+</main>
+<footer>RPI Server Control</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>
